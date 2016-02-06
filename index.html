@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>Sensor Tower Review Analysis Programming Project</title>
+		<style>
+			body {
+				font-family: Helvetica, Arial, serif;
+				font-size: 0.9em;
+				color: #444444;
+				background-color: #4882AE;
+				margin: 30px;
+				overflow-y:scroll;
+			}
+			
+			section {
+				background-color: #ffffff;
+				border-radius: 6px;
+				padding:20px;
+				border:1px solid #000000;
+				width:49%;
+				box-sizing:border-box;
+				margin-bottom: 30px;
+			}
+			
+			section:nth-child(1) {
+				float:left;
+			}
+			
+			section:nth-child(2) {
+				float:right;
+			}
+			
+			section > div {
+				margin-bottom: 20px;
+			}
+			
+			label {
+				display:block;
+				margin-bottom:5px;
+				font-weight:bold;
+			}
+			
+			label span {
+				font-weight:normal;
+			}
+			
+			#review {
+				box-sizing:border-box;
+				width:100%;
+				height:300px;
+				border-radius: 4px;
+				border:1px solid #aaaaaa;
+				padding:10px;
+				font-family: Helvetica, Arial, serif;
+				font-size: 0.9em;
+				line-height:1.3em;
+				color: #444444;
+				box-shadow: inset 3px 3px 4px -4px rgba(0,0,0,0.2);
+			}
+			
+			#charLimitWarning {
+				display: none;
+				color:#f00000;
+				margin-top: 10px;
+			}
+			
+			#minFrequency, #minFrequencyOutput {
+				vertical-align: middle;
+			}
+			
+			#submit {
+				padding:7px 10px;
+				font-family: Helvetica, Arial, serif;
+				font-size: 1.2em;
+				background-color: #265396;
+				color:#ffffff;
+				border-radius:4px;
+				border:1px solid #000000;
+				cursor:pointer;
+			}
+			
+			#result {
+				border-spacing: 0;
+				width:90%;
+				box-sizing:border-box;
+			}
+			
+			#result thead th, #result tbody td {
+				padding:5px 15px;
+				text-align:right;
+			}
+			
+			#result thead th:nth-child(2) {
+				text-align:left;
+			}
+			
+			#result tbody td:nth-child(1) {
+				border-right:1px solid #aaaaaa;
+				width:30%;
+			}
+			
+			#result tbody td:nth-child(2) {
+				width:200px;
+			}
+			
+			#result tbody td:nth-child(3) {
+				text-align:left;
+			}
+			
+			#result tbody td div {
+				height: 15px;
+				width: 0px;
+				background-color: #5CDD99;
+				border-radius: 3px;
+				float: left;
+				margin-right: 10px;
+			}
+			
+			#result tbody td span {
+				float:left;	
+			}
+			
+		</style>
+	</head>
+	
+	<body>
+		<section>
+			<!-- Text box -->
+			<div>
+				<label for="review">Enter or paste a review (5000 character limit)</label>
+				<textarea id="review"></textarea>
+				<div id="charLimitWarning">The text you entered was more than 5000 characters. It has been truncated to fit that limit.</div>
+			</div>
+			
+			<!-- Checkbox to exclude common words -->
+			<div>
+				<label for="removeCommonWords">
+					<input type="checkbox" id="removeCommonWords">
+					Exclude top 100 most common words <span>(e.g. be, is, the, and, of, ...)</span>
+				</label>
+			</div>
+			
+			<!-- Slider for minimum frequency -->
+			<div>
+				<label for="minFrequency">Set desired minimum word frequency</label>
+				<input type="range" id="minFrequency" min="1" value="1" max="30" step="1">
+				<span id="minFrequencyOutput"></span>
+			</div>
+			
+			<!-- Submit button -->
+			<div>
+				<button type="button" id="submit">Count</button>
+			</div>
+		</section>
+		
+		<section>
+			<div>
+				<label>Output</label>
+			</div>
+			
+			<!-- Table of results -->
+			<div id="resultDiv"></div>
+		</section>
+	</body>
+	<script type="text/javascript">
+		(function(){
+			
+			var countWords = {
+				config: {
+					//Set the default minimum frequency wanted for each word
+					minFrequency: 1,
+					
+					//The 100 most common words according to http://www.wordfrequency.info
+					commonWords: ['the', 'be', 'and', 'of', 'a', 'in', 'to', 'have', 'to', 'it', 'i', 'that', 'for', 'you', 'he', 'with', 'on', 'do', 'say', 'this', 'they', 'at', 'but', 'we', 'his', 'from', 'that', 'not', 'by', 'she', 'or', 'as', 'what', 'go', 'their', 'can', 'who', 'get', 'if', 'would', 'her', 'all', 'my', 'make', 'about', 'know', 'will', 'as', 'up', 'one', 'time', 'there', 'year', 'so', 'think', 'when', 'which', 'them', 'some', 'me', 'people', 'take', 'out', 'into', 'just', 'see', 'him', 'your', 'come', 'could', 'now', 'than', 'like', 'other', 'how', 'then', 'its', 'our', 'two', 'more', 'these', 'want', 'way', 'look', 'first', 'also', 'new', 'because', 'day', 'more', 'use', 'no', 'man', 'find', 'here', 'thing', 'give', 'many', 'well', 'is'],
+					
+					//Set the default to whether remove common words or not
+					removeCommonWords: false
+				},
+				
+				returnResult: function(txt) {
+					
+					//If something has been entered
+					if (txt !== "") {
+						
+						//First we clean the text
+						var cleanedText = this.returnCleanText(txt);
+						
+						//Then we create an object from the cleaned text with each unique word and each 2 concatenated words as the key and its frequency as the value
+						var wordCountObject = this.returnWordCountObject(cleanedText);
+						
+						//Now we convert that object to an array and sort it by word frequency descending
+						var sortedWordCountArray = this.returnSortedWordCountArrayFromObject(wordCountObject);
+						
+						//Finally we return a DOM element of a table with the sorted array as its contents
+						return this.returnTableDOMElementFromArrayContents(sortedWordCountArray);
+					
+					} else {
+						var noResultSpan = document.createElement('span');
+						
+						noResultSpan.id = "result";
+						noResultSpan.innerHTML = "Please enter something into the box on the left.";
+						
+						return noResultSpan;
+					}
+					
+				},
+				
+				returnCleanText: function(txt) {
+					
+					//Make everything lower case
+					cleanedText = txt.toLowerCase();
+					
+					//For people who don't use proper spacing after punctuation, add spaces where there's punctuation between letters
+					cleanedText = cleanedText.replace(/([a-z])(\.|\,|\?|\!|\:|\;)+([a-z])/g, "$1 $3");
+				
+					//Replace punctuation, words that don't contain a letter or a number, and anything after an apostrophe or backtick with a space
+					cleanedText = cleanedText.replace(/(\s\W+\s?|\W+\s|\W$)|('|`).+?\s/g, " ");
+					
+					//If set in config, check for most common words and remove them from the text
+					if (this.config.removeCommonWords) {
+						for (var i = 0; i < this.config.commonWords.length; i++) {
+							var re = new RegExp('(^|\\s)('+this.config.commonWords[i]+')\\s','g');
+							cleanedText = cleanedText.replace(re, " ");
+						}
+					}
+					
+					//Trim whitespace from beginning and end
+					cleanedText = cleanedText.trim();
+					
+					//Return the cleaned text
+					return cleanedText;
+				},
+				
+				returnWordCountObject: function(txt) {
+					
+					//Set up some variables we'll use
+					var wordCountObj = {},
+						concatWords;
+						
+					//Split the text we got by its spaces into an array
+					var wordsArray = txt.split(" ");
+					
+					//Loop through each word in the array
+					for (var i = 0; i < wordsArray.length; i++) {
+						
+						//If the word exists as a property in the wordCountObj object, increment its value; otherwise add it to the object as a new property
+						if (wordCountObj.hasOwnProperty(wordsArray[i])) {
+							wordCountObj[wordsArray[i]] += 1;
+						} else {
+							wordCountObj[wordsArray[i]] = 1;
+						}
+						
+						//Once we're on the second word in the loop, create a concatenation of the previous word and the current one
+						if (i > 0) {
+							concatWords = wordsArray[i-1] + " " + wordsArray[i];
+							
+							//If the concatenated words exist as a property in the wordCountObj object, increment their value; otherwise add it to the object as a new property
+							if (wordCountObj.hasOwnProperty(concatWords)) {
+								wordCountObj[concatWords] += 1;
+							} else {
+								wordCountObj[concatWords] = 1;
+							}
+						}
+					}
+					
+					//Return the filled word count object we created
+					return wordCountObj;
+				},
+				
+				returnSortedWordCountArrayFromObject: function(obj) {
+					
+					//Set up some variables we'll use
+					var wordCountArray = [],
+						wordCountArrayCopy = [],
+						key,
+						addWordBool,
+						index,
+						indexAdjust = 0;
+					
+					//Turn word count object into an array (adapted from http://stackoverflow.com/a/11352763)
+					for (key in obj) {
+						if (obj.hasOwnProperty(key)) {
+							
+							addWordBool = true;
+							
+							//Don't add word to the array that don't meet the minimum frequency specified in config
+							if (obj[key] < this.config.minFrequency) {
+								addWordBool = false;
+							}
+							
+							//Don't add 2 word concatenation to the array if its count is only 1
+							if (key.indexOf(" ") !== -1 && obj[key] === 1) {
+								addWordBool = false;
+							}
+							
+							//If we've come this far and addWordBool is still true, then add the word to the array
+							if (addWordBool) {
+								wordCountArray.push({'word': key, 'count': obj[key]});
+							}
+						}
+					}
+					
+					//Then sort the array by most frequent key
+					wordCountArray.sort(function(a, b) {
+						return b.count - a.count; 
+					});
+					
+					//Remove single words from the array if they already exist as a concatenated word combo with a count higher than 1
+					wordCountArrayCopy = wordCountArray.slice(0);
+					
+					for (index = 0; index < wordCountArrayCopy.length; index++) {
+						if (wordCountArrayCopy[index].word.indexOf(" ") !== -1 && wordCountArrayCopy[index].count > 1) {
+							indexAdjust += 2;
+							wordCountArray.splice(index - indexAdjust, 2);
+						}
+					}
+					
+					//Return the array we created
+					return wordCountArray;
+				},
+				
+				returnTableDOMElementFromArrayContents: function(arr) {
+					
+					//If the array is empty, tell the user there were no results
+					if (arr.length === 0) {
+						var noResultSpan = document.createElement('span');
+						
+						noResultSpan.id = "result";
+						noResultSpan.innerHTML = "Your count had no results. Try lowering the minimum frequency.";
+						
+						return noResultSpan;
+					
+					} else {
+						
+						//Create a table DOM element with a thead
+						var table = document.createElement('table'),
+							tHead = table.createTHead(),
+							tHeadTr = tHead.appendChild(document.createElement('tr')),
+							thWord = tHeadTr.appendChild(document.createElement('th')),
+							thCount = tHeadTr.appendChild(document.createElement('th'));
+						
+						//Set table id
+						table.id = "result";
+						
+						//Add header titles
+						thWord.innerHTML = "Word";
+						thCount.innerHTML = "Frequency";
+						
+						//Create tbody element
+						var tBody = table.appendChild(document.createElement('tbody'));
+						
+						//Calculate width of the div bar
+						var barDivWidth = function(currentCount, highestCount) {
+							return Math.round((currentCount / highestCount) * 200);
+						};
+						
+						//Loop through the array we got and create new rows and cells with its contents
+						for (var i = 0; i < arr.length; i++) {
+							
+							//Get the highest count
+							if (i === 0) {
+								var highestCount = arr[0].count;
+							}
+							
+							var tr = tBody.insertRow(),
+								tdWord = tr.insertCell(0),
+								tdCount = tr.insertCell(1),
+								barDiv = document.createElement('div'),
+								countSpan = document.createElement('span');
+							
+							//Add the word to the left cell
+							tdWord.innerHTML = arr[i].word;
+							
+							//Set the width of the bar div
+							barDiv.style.width = barDivWidth(arr[i].count, highestCount)+'px';
+							
+							//Add the bar div to the right cell
+							tdCount.appendChild(barDiv);
+							
+							//Add the word count to the span
+							countSpan.innerHTML = arr[i].count;
+							
+							//Add the span to the right cell
+							tdCount.appendChild(countSpan);
+						}
+						
+						//Return the table DOM element we just built
+						return table;
+							
+					}
+					
+				}
+			};
+			
+			
+			//Set the value of the minimum frequency slider in the output span
+			var setMinFrequencyOutput = function() {
+				document.getElementById('minFrequencyOutput').innerHTML = document.getElementById('minFrequency').value;
+			};
+			
+			//Enforce the character limit of the review field 
+			var enforceReviewCharLength = function() {
+				if (document.getElementById('review').value.length > 5000) {
+					document.getElementById('review').value = document.getElementById('review').value.substr(0, 5000);
+					document.getElementById('charLimitWarning').style.display = "block";
+				}
+			};
+			
+			
+			//Set the minimum frequency output on page load
+			setMinFrequencyOutput();
+			
+			
+			//Attach the input event listener to the frequency slider
+			document.getElementById('minFrequency').addEventListener('input', setMinFrequencyOutput);
+			
+			
+			//Attach the paste and keyup event listener to the review textarea
+			document.getElementById('review').addEventListener('paste', enforceReviewCharLength);
+			document.getElementById('review').addEventListener('keyup', enforceReviewCharLength);
+			
+			
+			//Attach the click event listener to the submit button
+			document.getElementById('submit').addEventListener('click', function(){
+
+				//Get the text in the textarea
+				var txt = document.getElementById('review').value;
+				
+				//Set the countWords configuration
+				countWords.config.minFrequency = document.getElementById('minFrequency').value;
+				countWords.config.removeCommonWords = document.getElementById('removeCommonWords').checked;
+				
+				//Get the result table as a DOM element
+				var result = countWords.returnResult(txt);
+				
+				//Remove the result table from the div if it already exists
+				if (document.getElementById('result') !== null) {
+					document.getElementById('resultDiv').removeChild(document.getElementById('result'));
+				}
+				
+				//Attach the result table to the results div
+				document.getElementById('resultDiv').appendChild(result);
+			});
+			
+			
+		})();
+	</script>
+</html>
